@@ -18,46 +18,12 @@ namespace RestoreWindowState
 		// 無視するウィンドウタイトル（完全一致、複数可）
 		public static string[] IgnoreTitles { get; set; } = Array.Empty<string>();
 
-		//APIとのデータ受け渡し用の構造体を定義
-		[StructLayout(LayoutKind.Sequential)]
-		private struct RECT
-		{
-			public int Left;
-			public int Top;
-			public int Right;
-			public int Bottom;
-		}
-
-		[StructLayout(LayoutKind.Sequential)]
-		private struct POINT
-		{
-			public int X;
-			public int Y;
-		}
-
-		[StructLayout(LayoutKind.Sequential)]
-		private struct WINDOWPLACEMENT
-		{
-			public int length;
-			public int flags;
-			public int showCmd;
-			public POINT ptMinPosition;
-			public POINT ptMaxPosition;
-			public RECT rcNormalPosition;
-		}
-
-		// showCmd値
-		private const int SW_SHOWNORMAL = 1;
-		private const int SW_SHOWMINIMIZED = 2;
-		private const int SW_SHOWMAXIMIZED = 3;
-
+		// ウィンドウ情報を保存するためのクラス
 		private class WindowInfo
 		{
 			public string? Title { get; set; }
-			// WINDOWPLACEMENT
-			public WINDOWPLACEMENT WinPlacement { get; set; }
+			public NativeMethods.WINDOWPLACEMENT WinPlacement { get; set; }
 		}
-
 		// ウィンドウ情報を取得して保存
 		public void CaptureAndSave(string filePath)
 		{
@@ -73,27 +39,26 @@ namespace RestoreWindowState
 		private static List<WindowInfo> GetAllWindows()
 		{
 			var windows = new List<WindowInfo>();
-			_ = EnumWindows((hWnd, lParam) =>
+			_ = NativeMethods.EnumWindows((hWnd, lParam) =>
 			{
-				if (IsWindowVisible(hWnd))
+				if (NativeMethods.IsWindowVisible(hWnd))
 				{
-					int length = GetWindowTextLength(hWnd);
-					if (length == 0) return true; // タイトルなしはスキップ
+					int length = NativeMethods.GetWindowTextLength(hWnd);
+					if (length == 0) return true;
 
 					StringBuilder builder = new StringBuilder(length + 1);
-					GetWindowText(hWnd, builder, builder.Capacity);
+					NativeMethods.GetWindowText(hWnd, builder, builder.Capacity);
 
-					// IgnoreTitles配列に一致するタイトルがあればスキップ
 					if (IgnoreTitles != null && IgnoreTitles.Length > 0 &&
 						IgnoreTitles.Contains(builder.ToString()))
 					{
 						return true;
 					}
 
-					WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
-					if (!GetWindowPlacement(hWnd, ref placement)) return true; // ウィンドウの配置情報を取得できなかった場合はスキップ
+					var placement = new NativeMethods.WINDOWPLACEMENT();
+					if (!NativeMethods.GetWindowPlacement(hWnd, ref placement)) return true;
 
-					if (placement.showCmd == SW_SHOWMINIMIZED) return true; // 最小化されているウィンドウはスキップ
+					if (placement.showCmd == NativeMethods.SW_SHOWMINIMIZED) return true;
 
 					windows.Add(new WindowInfo
 					{
@@ -105,7 +70,6 @@ namespace RestoreWindowState
 			}, IntPtr.Zero);
 			return windows;
 		}
-
 		private static void SaveWindowsToJson(string filePath,List<WindowInfo> winlist)
 		{
 			var options = new JsonSerializerOptions
@@ -144,34 +108,34 @@ namespace RestoreWindowState
 			foreach (var win in winlist)
 			{
 				// 最小化されているウィンドウはスキップ
-				if (win.WinPlacement.showCmd == SW_SHOWMINIMIZED)
+				if (win.WinPlacement.showCmd == NativeMethods.SW_SHOWMINIMIZED)
 					continue;
 
 				IntPtr hWnd = FindWindowByTitle(win.Title!);
 				if (hWnd == IntPtr.Zero)
 					continue;
 
-				WINDOWPLACEMENT placement = win.WinPlacement;
+				NativeMethods.WINDOWPLACEMENT placement = win.WinPlacement;
 
 				// 状態を設定
-				if (win.WinPlacement.showCmd == SW_SHOWMAXIMIZED)
-					placement.showCmd = SW_SHOWMAXIMIZED;
+				if (win.WinPlacement.showCmd == NativeMethods.SW_SHOWMAXIMIZED)
+					placement.showCmd = NativeMethods.SW_SHOWMAXIMIZED;
 				else
-					placement.showCmd = SW_SHOWNORMAL;
+					placement.showCmd = NativeMethods.SW_SHOWNORMAL;
 
-				SetWindowPlacement(hWnd, ref placement);
+				NativeMethods.SetWindowPlacement(hWnd, ref placement);
 			}
 		}
 
 		private static IntPtr FindWindowByTitle(string title)
 		{
 			IntPtr found = IntPtr.Zero;
-			EnumWindows((hWnd, lParam) =>
+			NativeMethods.EnumWindows((hWnd, lParam) =>
 			{
-				int length = GetWindowTextLength(hWnd);
+				int length = NativeMethods.GetWindowTextLength(hWnd);
 				if (length == 0) return true;
 				StringBuilder builder = new StringBuilder(length + 1);
-				GetWindowText(hWnd, builder, builder.Capacity);
+				NativeMethods.GetWindowText(hWnd, builder, builder.Capacity);
 				if (builder.ToString() == title)
 				{
 					found = hWnd;
@@ -181,25 +145,5 @@ namespace RestoreWindowState
 			}, IntPtr.Zero);
 			return found;
 		}
-
-		private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-		[DllImport("user32.dll")]
-		private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-		[DllImport("user32.dll")]
-		private static extern bool IsWindowVisible(IntPtr hWnd);
-
-		[DllImport("user32.dll", SetLastError = true)]
-		private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-		[DllImport("user32.dll", SetLastError = true)]
-		private static extern int GetWindowTextLength(IntPtr hWnd);
-
-		[DllImport("user32.dll")]
-		private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
-
-		[DllImport("user32.dll")]
-		private static extern bool SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT lpwndpl);
 	}
 }
