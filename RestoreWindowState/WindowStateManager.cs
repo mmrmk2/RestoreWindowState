@@ -117,13 +117,22 @@ namespace RestoreWindowState
 
 				NativeMethods.WINDOWPLACEMENT placement = win.WinPlacement;
 
-				// 状態を設定
 				if (win.WinPlacement.showCmd == NativeMethods.SW_SHOWMAXIMIZED)
-					placement.showCmd = NativeMethods.SW_SHOWMAXIMIZED;
-				else
+				{//最大化状態で別のモニターに配置されてしまうと最大化での再配置が行われないため、一度通常状態に戻してから再配置を行う。
+					// 1. 通常状態で配置
 					placement.showCmd = NativeMethods.SW_SHOWNORMAL;
+					NativeMethods.SetWindowPlacement(hWnd, ref placement);
 
-				NativeMethods.SetWindowPlacement(hWnd, ref placement);
+					// 2. 最大化状態で再配置
+					placement.showCmd = NativeMethods.SW_SHOWMAXIMIZED;
+					NativeMethods.SetWindowPlacement(hWnd, ref placement);
+				}
+				else
+				{
+					// 通常状態で配置
+					placement.showCmd = NativeMethods.SW_SHOWNORMAL;
+					NativeMethods.SetWindowPlacement(hWnd, ref placement);
+				}
 			}
 		}
 
