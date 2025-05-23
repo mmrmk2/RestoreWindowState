@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace RestoreWindowState
@@ -24,8 +22,6 @@ namespace RestoreWindowState
 		private class WindowInfo
 		{
 			public string? Title { get; set; }
-			public string? ClassName { get; set; }
-			public uint ProcessId { get; set; }
 			public NativeMethods.WINDOWPLACEMENT WinPlacement { get; set; }
 		}
 		// ウィンドウ情報を取得して保存
@@ -52,9 +48,6 @@ namespace RestoreWindowState
 
 					StringBuilder builder = new StringBuilder(length + 1);
 					NativeMethods.GetWindowText(hWnd, builder, builder.Capacity);
-					StringBuilder className = new StringBuilder(256);
-					NativeMethods.GetClassName(hWnd, className, className.Capacity);
-					NativeMethods.GetWindowThreadProcessId(hWnd, out uint processId);
 
 					if (IgnoreTitles != null && IgnoreTitles.Length > 0 &&
 						IgnoreTitles.Contains(builder.ToString()))
@@ -70,8 +63,6 @@ namespace RestoreWindowState
 					windows.Add(new WindowInfo
 					{
 						Title = builder.ToString(),
-						ClassName = className.ToString(),
-						ProcessId = processId,
 						WinPlacement = placement
 					});
 				}
@@ -84,11 +75,10 @@ namespace RestoreWindowState
 			var options = new JsonSerializerOptions
 			{
 				WriteIndented = true,
-				IncludeFields = true,
-				Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+				IncludeFields = true
 			};
 			string json = JsonSerializer.Serialize(winlist, options);
-			File.WriteAllText(filePath, json, Encoding.UTF8);
+			File.WriteAllText(filePath, json);
 		}
 
 		private static List<WindowInfo> LoadWindowsFromJson(string filePath)
@@ -102,7 +92,7 @@ namespace RestoreWindowState
 			else
 			{   // ファイルが存在する場合は、JSONを読み込んでウィンドウ情報を復元
 				List<WindowInfo> winlist;
-				string json = File.ReadAllText(filePath, Encoding.UTF8);
+				string json = File.ReadAllText(filePath);
 				var options = new JsonSerializerOptions
 				{
 					PropertyNameCaseInsensitive = true,
@@ -121,14 +111,14 @@ namespace RestoreWindowState
 				if (win.WinPlacement.showCmd == NativeMethods.SW_SHOWMINIMIZED)
 					continue;
 
-				IntPtr hWnd = FindWindowByInfo(win.Title!, win.ClassName!, win.ProcessId);
+				IntPtr hWnd = FindWindowByTitle(win.Title!);
 				if (hWnd == IntPtr.Zero)
 					continue;
 
 				NativeMethods.WINDOWPLACEMENT placement = win.WinPlacement;
 
 				if (win.WinPlacement.showCmd == NativeMethods.SW_SHOWMAXIMIZED)
-				{
+				{//最大化状態で別のモニターに配置されてしまうと最大化での再配置が行われないため、一度通常状態に戻してから再配置を行う。
 					// 1. 通常状態で配置
 					placement.showCmd = NativeMethods.SW_SHOWNORMAL;
 					NativeMethods.SetWindowPlacement(hWnd, ref placement);
@@ -146,7 +136,7 @@ namespace RestoreWindowState
 			}
 		}
 
-		private static IntPtr FindWindowByInfo(string title, string className, uint processId)
+		private static IntPtr FindWindowByTitle(string title)
 		{
 			IntPtr found = IntPtr.Zero;
 			NativeMethods.EnumWindows((hWnd, lParam) =>
@@ -155,15 +145,7 @@ namespace RestoreWindowState
 				if (length == 0) return true;
 				StringBuilder builder = new StringBuilder(length + 1);
 				NativeMethods.GetWindowText(hWnd, builder, builder.Capacity);
-
-				StringBuilder classBuilder = new StringBuilder(256);
-				NativeMethods.GetClassName(hWnd, classBuilder, classBuilder.Capacity);
-
-				NativeMethods.GetWindowThreadProcessId(hWnd, out uint pid);
-
-				if (builder.ToString() == title &&
-					classBuilder.ToString() == className &&
-					pid == processId)
+				if (builder.ToString() == title)
 				{
 					found = hWnd;
 					return false;
