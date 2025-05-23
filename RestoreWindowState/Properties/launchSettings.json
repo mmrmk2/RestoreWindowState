@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RestoreWindowState": {
+      "commandName": "Project",
+      "commandLineArgs": "-r"
+    }
+  }
+}

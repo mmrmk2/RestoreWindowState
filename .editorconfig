@@ -1,0 +1,4 @@
+﻿[*.cs]
+
+# CA1869: 'JsonSerializerOptions' インスタンスをキャッシュして再利用する
+dotnet_diagnostic.CA1869.severity = none
